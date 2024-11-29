@@ -8,28 +8,28 @@
         <title>Fishy!</title>
         <script src="fish.css"></script>
         <div>
-            <body style="background-color:powderblue;">
+            <body style="background-color:aqua;">
   <button id="button">Pause</button>
   <canvas id="canvas"></canvas>
 </div>
 <script>
-    // Gets a random integer betweeen min and max, inclusive
+    // A random number from min-max
 function getRandomInt(min, max) {
     min = Math.ceil(min);
     max = Math.floor(max);
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-// Clamps a number to min and max, inclusive
+// Combines Numbers into one
 Number.prototype.clamp = function(min, max) {
   return Math.min(Math.max(this, min), max);
 };
 
-// Canvas and canvas context
+// Canvas context 
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
-// Feel free to change these values!
+// Number of fishies/predators!
 const NUM_FISH = 450;
 const NUM_PREDATORS = 8;
 
