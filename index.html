@@ -10,7 +10,8 @@
   <button id="button">Pause</button>
   <canvas id="canvas"></canvas>
 </div>
-<script>// Gets a random integer betweeen min and max, inclusive
+<script>
+    // Gets a random integer betweeen min and max, inclusive
 function getRandomInt(min, max) {
     min = Math.ceil(min);
     max = Math.floor(max);
@@ -28,7 +29,7 @@ const ctx = canvas.getContext("2d");
 
 // Feel free to change these values!
 const NUM_FISH = 450;
-const NUM_PREDATORS = 3;
+const NUM_PREDATORS = 8;
 
 const FISH_SPAWN_INTERVAL = 2000;
 const FISH_SPAWN_AMOUNT = 15;
