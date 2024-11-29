@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1.0">
+        <link rel="stylesheet" href="bootstrap.min.css">
+        <link rel="stylesheet" href="arduino-light.min.css">
+        <title>Fishy!</title>
+        <div>
+  <button id="button">Pause</button>
+  <canvas id="canvas"></canvas>
+</div>
+<script>// Gets a random integer betweeen min and max, inclusive
+function getRandomInt(min, max) {
+    min = Math.ceil(min);
+    max = Math.floor(max);
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+// Clamps a number to min and max, inclusive
+Number.prototype.clamp = function(min, max) {
+  return Math.min(Math.max(this, min), max);
+};
+
+// Canvas and canvas context
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+// Feel free to change these values!
+const NUM_FISH = 450;
+const NUM_PREDATORS = 3;
+
+const FISH_SPAWN_INTERVAL = 2000;
+const FISH_SPAWN_AMOUNT = 15;
+
+// Fish and predator hovering variables
+let mouseX = 0;
+let mouseY = 0;
+
+let hoveredFish = null;
+let hoveredPredator = null;
+
+// Pausing and playing variables
+let isPaused = false;
+const pauseButton = document.getElementById("button");
+
+// Set the canvas's width and height
+canvas.height = window.innerHeight;
+canvas.width = window.innerWidth;
+
+class Fish {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.angle = Math.random() * 360;
+    this.speed = 1.5 + Math.random() * 2; // Variation in speed because Every Fish Is Different
+    this.velocityX = Math.cos(this.angle * Math.PI / 180) * this.speed;
+    this.velocityY = Math.sin(this.angle * Math.PI / 180) * this.speed;
+  }
+  
+  flee(predators) {
+    let fleeVectorX = 0;
+    let fleeVectorY = 0;
+    let predatorNearby = false;
+
+    for (let predator of predators) {
+      const dx = this.x - predator.x;
+      const dy = this.y - predator.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      if (distance < 80) { // Danger range in pixels
+        // Calculate a flee vector away from the predator
+        fleeVectorX += dx / distance;
+        fleeVectorY += dy / distance;
+        predatorNearby = true;
+      }
+    }
+
+    // If there's a nearby predator, apply the flee behavior
+    if (predatorNearby) {
+      // Normalize flee vector
+      const fleeMagnitude = Math.sqrt(fleeVectorX * fleeVectorX + fleeVectorY * fleeVectorY);
+      fleeVectorX = (fleeVectorX / fleeMagnitude) * this.speed;
+      fleeVectorY = (fleeVectorY / fleeMagnitude) * this.speed;
+
+      // Apply flee vector to the fish's current velocity
+      this.velocityX += fleeVectorX;
+      this.velocityY += fleeVectorY;
+
+      // Clamp the velocity to a maximum speed for smoother movement
+      const maxSpeed = 3;
+      const currentSpeed = Math.sqrt(this.velocityX * this.velocityX + this.velocityY * this.velocityY);
+      if (currentSpeed > maxSpeed) {
+        this.velocityX = (this.velocityX / currentSpeed) * maxSpeed;
+        this.velocityY = (this.velocityY / currentSpeed) * maxSpeed;
+      }
+
+      // Update angle to match fleeing direction
+      this.angle = Math.atan2(this.velocityY, this.velocityX) * (180 / Math.PI);
+    }
+  }
+
+  update() {
+    // Flee from predators
+    this.flee(predators);
+    
+    // Add a slight random adjustment to the angle
+    this.angle += getRandomInt(-5, 5);
+
+    // Recalculate velocity based on the updated angle
+    this.velocityX = Math.cos(this.angle * Math.PI / 180) * this.speed;
+    this.velocityY = Math.sin(this.angle * Math.PI / 180) * this.speed;
+
+    // Move the fish
+    this.x += this.velocityX;
+    this.y += this.velocityY;
+
+    // Wrap around the canvas edges
+    if (this.x < 0) this.x = canvas.width;
+    if (this.x > canvas.width) this.x = 0;
+    if (this.y < 0) this.y = canvas.height;
+    if (this.y > canvas.height) this.y = 0;
+  }
+   
+  render() {
+    // Set the color of the fish
+    ctx.fillStyle = "orange";
+    
+    // Rotate the canvas
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate((this.angle * Math.PI) / 180);
+
+    // Draw the triangle representing the fish
+    ctx.beginPath();
+    ctx.moveTo(-5, -5);
+    ctx.lineTo(-5, 5);
+    ctx.lineTo(5, 0);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.restore();
+  }
+}
+
+class Predator {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.angle = Math.random() * 360; // Initial direction
+    this.speed = 2 + Math.random(); // Predators are a bit faster than fish but have less variation
+    this.targetFish = null;
+  }
+
+  findNearestFish(fishArray) {
+    let minDistance = Infinity;
+    let closestFish = null;
+
+    for (let fish of fishArray) {
+      // Calculate the distance to each fish
+      const dx = fish.x - this.x;
+      const dy = fish.y - this.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      // Find the closest fish within a certain range
+      if (distance < minDistance && distance < 200) { // 200px detection range
+        minDistance = distance;
+        closestFish = fish;
+      }
+    }
+
+    this.targetFish = closestFish;
+  }
+
+  update() {
+    // Finds the nearest fish
+    this.findNearestFish(fish);
+    
+    if (this.targetFish) {
+      // Calculate direction towards the target fish
+      const dx = this.targetFish.x - this.x;
+      const dy = this.targetFish.y - this.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      // Normalize the direction vector and scale by speed
+      this.velocityX = (dx / distance) * this.speed;
+      this.velocityY = (dy / distance) * this.speed;
+
+      // Move toward the target fish
+      this.x += this.velocityX;
+      this.y += this.velocityY;
+
+      // Gradually turn toward the target fish
+      const targetAngle = Math.atan2(dy, dx) * (180 / Math.PI);
+      const angleDiff = targetAngle - this.angle;
+      this.angle += angleDiff * 0.1; // Adjust 0.1 to control turning speed
+      
+      if (Math.abs(this.angle - targetAngle) > 170) this.angle += targetAngle;
+
+      // Calculate new velocity based on updated angle
+      this.velocityX = Math.cos(this.angle * Math.PI / 180) * this.speed;
+      this.velocityY = Math.sin(this.angle * Math.PI / 180) * this.speed;
+
+      // If close enough to the target fish, "catch" it and reset target
+      if (distance < 25) {
+        // Remove the caught fish from the fish array
+        const fishIndex = fish.indexOf(this.targetFish);
+        if (fishIndex > -1) {
+          fish.splice(fishIndex, 1);
+        }
+        
+        this.targetFish = null; // Fish is caught, stop targeting
+      }
+    }
+
+    // Wrap around canvas edges
+    if (this.x < 0) this.x = canvas.width;
+    if (this.x > canvas.width) this.x = 0;
+    if (this.y < 0) this.y = canvas.height;
+    if (this.y > canvas.height) this.y = 0;
+  }
+  
+  render() {
+    // Rotate the predator
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate((this.angle * Math.PI) / 180);
+  
+    // Add menacing red triangles
+    ctx.fillStyle = "red";
+    ctx.beginPath();
+    ctx.moveTo(-15, -10);
+    ctx.lineTo(-15, 10);
+    ctx.lineTo(15, 0);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.restore();
+  }
+}
+
+function checkHover() {
+  hoveredFish = null; // Reset hovered fish each frame
+  hoveredPredator = null; // Do the same with the predators
+  
+  // Check for hovered fish
+  for (let f of fish) {
+    const dx = f.x - mouseX;
+    const dy = f.y - mouseY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance < 15) {
+      hoveredFish = f;
+      break;
+    }
+  }
+  
+  // Check for hovered predator if no fish is hovered
+  for (let p of predators) {
+    const dx = p.x - mouseX;
+    const dy = p.y - mouseY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance < 15) {
+      hoveredPredator = p;
+      return;
+    }
+  }
+}
+
+function renderFishStats() {
+  if (hoveredFish) {
+    const statsText = `Fish\nPosition: (${Math.floor(hoveredFish.x)}, ${Math.floor(hoveredFish.y)})\nSpeed: ${hoveredFish.speed.toFixed(2)}`;
+
+    // Draw background box
+    ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+    ctx.fillRect(mouseX + 10, mouseY + 10, 120, 50);
+
+    // Draw text
+    ctx.fillStyle = "white";
+    ctx.font = "12px Arial";
+    ctx.fillText(statsText.split("\n")[0], mouseX + 15, mouseY + 25); // "Fish"
+    ctx.fillText(statsText.split("\n")[1], mouseX + 15, mouseY + 40); // Position line
+    ctx.fillText(statsText.split("\n")[2], mouseX + 15, mouseY + 55); // Speed line
+
+  } else if (hoveredPredator) {
+    const targetText = hoveredPredator.targetFish ? `Target: (${Math.floor(hoveredPredator.targetFish.x)}, ${Math.floor(hoveredPredator.targetFish.y)})` : "Target: None";
+    const statsText = `Predator\nPosition: (${Math.floor(hoveredPredator.x)}, ${Math.floor(hoveredPredator.y)})\nSpeed: ${hoveredPredator.speed.toFixed(2)}\n${targetText}`;
+
+    // Draw background box
+    ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+    ctx.fillRect(mouseX + 10, mouseY + 10, 150, 65);
+
+    // Draw text
+    ctx.fillStyle = "white";
+    ctx.font = "12px Arial";
+    ctx.fillText(statsText.split("\n")[0], mouseX + 15, mouseY + 25); // "Predator"
+    ctx.fillText(statsText.split("\n")[1], mouseX + 15, mouseY + 40); // Position line
+    ctx.fillText(statsText.split("\n")[2], mouseX + 15, mouseY + 55); // Speed line
+    ctx.fillText(statsText.split("\n")[3], mouseX + 15, mouseY + 70); // Target line
+  }
+}
+
+var fish = [];
+var predators = [];
+
+// Adds the fish
+for (let i = 0; i < NUM_FISH; i++) {
+  fish.push(new Fish(
+    getRandomInt(0, window.innerWidth),
+    getRandomInt(0, window.innerHeight)
+  ));
+}
+
+// Adds the predators
+for (let i = 0; i < NUM_PREDATORS; i++) {
+  predators.push(new Predator(
+    getRandomInt(0, window.innerWidth),
+    getRandomInt(0, window.innerHeight)
+  ));
+}
+
+// Animation loop
+function update() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    if (!isPaused) {
+      // Update each fish
+      for (let f of fish) {
+        f.update();
+      }
+
+      // Update each predator
+      for (let p of predators) {
+        p.update();
+      }
+    }
+    
+      // Render each fish
+      for (let f of fish) {
+        f.render();
+      }
+
+      // Render each predator
+      for (let p of predators) {
+        p.render();
+      }
+  
+    // Check for hovered fish and render stats if needed
+    checkHover();
+    renderFishStats();
+
+    requestAnimationFrame(update);
+}
+
+update();
+
+// Check if the window has been resized
+window.addEventListener('resize', () => {
+    // If so, scale the canvas
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+});
+
+function spawnFishGroup() {
+  if (!isPaused) {
+    for (let i = 0; i < FISH_SPAWN_AMOUNT; i++) {
+      fish.push(new Fish(
+        getRandomInt(0, window.innerWidth),
+        getRandomInt(0, window.innerHeight)
+      ));
+    }
+  }
+}
+
+setInterval(spawnFishGroup, FISH_SPAWN_INTERVAL);
+
+// Get the position of your mouse when it moves
+canvas.addEventListener("mousemove", (event) => {
+  const rect = canvas.getBoundingClientRect();
+  mouseX = event.clientX - rect.left;
+  mouseY = event.clientY - rect.top;
+});
+
+// Pause and play the simulation
+pauseButton.addEventListener("click", () => {
+  isPaused = !isPaused;
+  pauseButton.textContent = isPaused ? "Play" : "Pause";
+});
+</script>
+</body>
+</html>
