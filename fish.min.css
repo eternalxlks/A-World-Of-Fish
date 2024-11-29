@@ -1,0 +1,23 @@
+canvas {
+  /* Maybe a lighter background?*/
+  display: block;
+  background-color: #00bbee;
+}
+
+button {
+  position: absolute;
+  top: 10px;  /* Position from the top of the canvas */
+  left: 10px; /* Position from the left of the canvas */
+  padding: 8px 16px;
+  background-color: rgba(128, 128, 128, 0.7); /* Semi-transparent background */
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  z-index: 1; /* Ensure it's on top of the canvas */
+}
+
+body {
+  padding: 0px;
+  margin: 0px;
+}
